@@ -36,6 +36,13 @@ def test_next_paths_prefix():
         assert [os.path.basename(p) for p in paths] == ["fix002.png", "fix003.png"]
 
 
+def test_presets_fill_prompt_and_negative():
+    from app import PRESETS
+    assert "ผิว" in " ".join(PRESETS)
+    for name, (p, n) in PRESETS.items():
+        assert p.strip(), name
+
+
 def main():
     n = 0
     for name, fn in sorted(globals().items()):

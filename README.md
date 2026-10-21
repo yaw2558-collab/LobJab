@@ -32,3 +32,6 @@ mask: รูปขาว/ดำขนาดเท่าต้นฉบับ (�
 
 - แอป **Amuse** (ยืม `sd-cli.exe` จาก `%LOCALAPPDATA%\Amuse\RuntimeStableDiffusionCpp\vulkan\`)
 - โมเดล **SD-Turbo** (`sd_turbo.safetensors` ใน HF cache หรือโฟลเดอร์ `models/`)
+- โมเดล **SD1.5-Inpaint** (`sd-v1-5-inpainting.safetensors` ในโฟลเดอร์ `models/` —
+  โหลดจาก https://huggingface.co/webui/stable-diffusion-inpainting) — เติมเนียนกว่า
+  เหมาะกับลบเครื่องประดับ/วัตถุบนผิว (เลือกสูตร prompt ผิว/แขน + ระบายคลุมกำไลให้มิด)

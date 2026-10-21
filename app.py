@@ -10,7 +10,7 @@ import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageTk
 from send2trash import send2trash
 
-from inpaint import inpaint
+from inpaint import MODEL_DEFAULTS, inpaint
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -22,9 +22,16 @@ ACCENT_HOVER = "#E8933F"
 TITLE_FONT = ("Segoe UI", 26, "bold")
 HEAD_FONT = ("Segoe UI", 12, "bold")
 BODY_FONT = ("Segoe UI", 12)
-MODEL_IDS = {"SD-Turbo (เร็ว)": "sd-turbo", "SDXL-Turbo (1024px)": "sdxl-turbo"}
+MODEL_IDS = {"SD-Turbo (เร็ว)": "sd-turbo", "SDXL-Turbo (1024px)": "sdxl-turbo",
+             "SD1.5-Inpaint (เนียน ~1 นาที)": "sd15-inpaint"}
 OVERLAY_RGBA = (217, 122, 43, 140)
 FEATHER = 8
+PRESETS = {"พื้นหลังทั่วไป": ("clean background, no objects, empty", ""),
+           "ผิว/แขน (ถอดเครื่องประดับ)": (
+               "bare skin, arm, wrist, natural skin texture, seamless",
+               "bracelet, jewelry, metal, watch, ring, tattoo, scar"),
+           "ท้องฟ้า/วิว": ("clear sky, natural landscape",
+                           "people, buildings, wires, text")}
 
 
 def next_path(out_dir):
@@ -154,7 +161,12 @@ class App(ctk.CTk):
         ctk.CTkButton(side, text="ล้าง mask", font=BODY_FONT, fg_color="transparent",
                       border_width=1, command=self.on_clear_mask).pack(fill="x", padx=16, pady=(0, 8))
 
-        ctk.CTkLabel(side, text="พื้นหลังที่อยากให้เติม (English)", font=HEAD_FONT).pack(anchor="w", padx=16)
+        ctk.CTkLabel(side, text="สูตร prompt (บรรยายสิ่งที่อยากให้แทน)", font=HEAD_FONT).pack(anchor="w", padx=16)
+        self.preset = ctk.CTkOptionMenu(side, values=list(PRESETS), font=BODY_FONT, width=268,
+                                        command=self.on_preset)
+        self.preset.pack(padx=16, pady=(0, 8))
+
+        ctk.CTkLabel(side, text="Prompt (English)", font=HEAD_FONT).pack(anchor="w", padx=16)
         self.prompt = ctk.CTkTextbox(side, height=60, font=BODY_FONT)
         self.prompt.pack(fill="x", padx=16, pady=(0, 8))
         self.prompt.insert("1.0", "clean background, no objects, empty")
@@ -164,7 +176,8 @@ class App(ctk.CTk):
         self.negative.pack(fill="x", padx=16, pady=(0, 8))
 
         ctk.CTkLabel(side, text="โมเดล", font=HEAD_FONT).pack(anchor="w", padx=16)
-        self.model = ctk.CTkOptionMenu(side, values=list(MODEL_IDS), font=BODY_FONT, width=268)
+        self.model = ctk.CTkOptionMenu(side, values=list(MODEL_IDS), font=BODY_FONT, width=268,
+                                        command=self.on_model_change)
         self.model.pack(padx=16, pady=(0, 8))
 
         ctk.CTkLabel(side, text="ขนาดทำงาน (ด้านยาว)", font=HEAD_FONT).pack(anchor="w", padx=16)
@@ -177,7 +190,7 @@ class App(ctk.CTk):
         ctk.CTkLabel(steps_row, text="Steps", font=HEAD_FONT).pack(side="left")
         self.steps_val = ctk.CTkLabel(steps_row, text="4", font=BODY_FONT, width=30)
         self.steps_val.pack(side="right")
-        self.steps = ctk.CTkSlider(side, from_=1, to=12, number_of_steps=11, command=self.on_steps)
+        self.steps = ctk.CTkSlider(side, from_=1, to=50, number_of_steps=49, command=self.on_steps)
         self.steps.set(4)
         self.steps.pack(fill="x", padx=16, pady=(0, 6))
 
@@ -190,6 +203,16 @@ class App(ctk.CTk):
                                       command=self.on_strength)
         self.strength.set(1.0)
         self.strength.pack(fill="x", padx=16, pady=(0, 6))
+
+        dilate_row = ctk.CTkFrame(side, fg_color="transparent")
+        dilate_row.pack(fill="x", padx=16)
+        ctk.CTkLabel(dilate_row, text="ขยาย mask", font=HEAD_FONT).pack(side="left")
+        self.dilate_val = ctk.CTkLabel(dilate_row, text="5", font=BODY_FONT, width=30)
+        self.dilate_val.pack(side="right")
+        self.dilate = ctk.CTkSlider(side, from_=0, to=30, number_of_steps=30,
+                                    command=self.on_dilate)
+        self.dilate.set(5)
+        self.dilate.pack(fill="x", padx=16, pady=(0, 6))
 
         ctk.CTkLabel(side, text="Seed (ว่าง = สุ่มใหม่ทุกครั้ง)", font=HEAD_FONT).pack(anchor="w", padx=16)
         seed_row = ctk.CTkFrame(side, fg_color="transparent")
@@ -265,6 +288,25 @@ class App(ctk.CTk):
 
     def on_strength(self, v):
         self.strength_val.configure(text=f"{float(v):.2f}")
+
+    def on_dilate(self, v):
+        self.dilate_val.configure(text=str(int(round(float(v)))))
+
+    def on_preset(self, choice):
+        p, n = PRESETS.get(choice, ("", ""))
+        self.prompt.delete("1.0", "end")
+        self.prompt.insert("1.0", p)
+        self.negative.delete("1.0", "end")
+        self.negative.insert("1.0", n)
+
+    def on_model_change(self, choice):
+        mid = MODEL_IDS.get(choice, "sd-turbo")
+        d = MODEL_DEFAULTS.get(mid, MODEL_DEFAULTS["sd-turbo"])
+        self.steps.set(d["steps"])
+        self.steps_val.configure(text=str(d["steps"]))
+        self.strength.set(d["strength"])
+        self.strength_val.configure(text=f"{d['strength']:.2f}")
+        self.size.set("1024" if mid == "sdxl-turbo" else "512")
 
     def on_view(self, choice):
         self.refresh_canvas()
@@ -397,19 +439,24 @@ class App(ctk.CTk):
         seed = int(seed_txt) if seed_txt.lstrip("-").isdigit() else None
         negative = self.negative.get("1.0", "end").strip()
         model = MODEL_IDS.get(self.model.get(), "sd-turbo")
+        guidance = MODEL_DEFAULTS.get(model, MODEL_DEFAULTS["sd-turbo"])["guidance"]
+        dilate = int(round(self.dilate.get()))
         self.btn.configure(state="disabled")
         self.status.configure(text="กำลังลบวัตถุ...")
         self.progress.start()
         threading.Thread(target=self.work,
-                         args=(prompt, steps, strength, seed, long_side, negative, model),
+                         args=(prompt, steps, strength, seed, long_side, negative, model,
+                               guidance, dilate),
                          daemon=True).start()
 
-    def work(self, prompt, steps, strength, seed, long_side, negative, model):
+    def work(self, prompt, steps, strength, seed, long_side, negative, model,
+             guidance, dilate):
         try:
             os.makedirs(self.out_dir, exist_ok=True)
             img, used_seed = inpaint(self.orig, self.mask, prompt, steps=steps,
                                      strength=strength, seed=seed, negative=negative,
-                                     model=model, long_side=long_side, feather=FEATHER)
+                                     model=model, long_side=long_side, feather=FEATHER,
+                                     guidance=guidance, dilate=dilate)
             path = next_path(self.out_dir)
             img.save(path)
             self.after(0, self.show_result, img, path, used_seed)

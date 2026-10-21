@@ -48,6 +48,22 @@ def test_inpaint_missing_sd_cli():
         inpaint.SD_CLI = old
 
 
+def test_model_defaults_cover_all_models():
+    from inpaint import MODEL_DEFAULTS
+    for m in ("sd-turbo", "sdxl-turbo", "sd15-inpaint"):
+        d = MODEL_DEFAULTS[m]
+        assert d["steps"] >= 1 and d["guidance"] >= 1.0 and 0 < d["strength"] <= 1.0
+
+
+def test_dilate_expands_mask():
+    from PIL import Image
+    from inpaint import dilate_mask
+    m = Image.new("L", (20, 20), 0)
+    m.putpixel((10, 10), 255)
+    assert dilate_mask(m, 3).getbbox() == (7, 7, 14, 14)
+    assert dilate_mask(m, 0).getbbox() == (10, 10, 11, 11)
+
+
 def main():
     n = 0
     for name, fn in sorted(globals().items()):
