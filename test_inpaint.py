@@ -53,6 +53,7 @@ def test_model_defaults_cover_all_models():
     for m in ("sd-turbo", "sdxl-turbo", "sd15-inpaint"):
         d = MODEL_DEFAULTS[m]
         assert d["steps"] >= 1 and d["guidance"] >= 1.0 and 0 < d["strength"] <= 1.0
+        assert d["long_side"] in (512, 768, 1024)
 
 
 def test_dilate_expands_mask():
@@ -62,6 +63,19 @@ def test_dilate_expands_mask():
     m.putpixel((10, 10), 255)
     assert dilate_mask(m, 3).getbbox() == (7, 7, 14, 14)
     assert dilate_mask(m, 0).getbbox() == (10, 10, 11, 11)
+
+
+def test_paste_back_keeps_original_size_and_ratio():
+    from PIL import Image
+    from inpaint import paste_back
+    orig = Image.new("RGB", (1000, 700), (50, 60, 70))
+    filled = Image.new("RGB", (512, 384), (200, 150, 120))
+    m = Image.new("L", (1000, 700), 0)
+    m.paste(255, (400, 300, 600, 500))
+    out = paste_back(orig, filled, m)
+    assert out.size == (1000, 700)
+    assert out.getpixel((10, 10)) == (50, 60, 70)
+    assert out.getpixel((500, 400)) == (200, 150, 120)
 
 
 def main():

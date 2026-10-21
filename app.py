@@ -306,7 +306,7 @@ class App(ctk.CTk):
         self.steps_val.configure(text=str(d["steps"]))
         self.strength.set(d["strength"])
         self.strength_val.configure(text=f"{d['strength']:.2f}")
-        self.size.set("1024" if mid == "sdxl-turbo" else "512")
+        self.size.set(str(d.get("long_side", 512)))
 
     def on_view(self, choice):
         self.refresh_canvas()

@@ -35,9 +35,9 @@ def resolve_sd_cli():
 
 SD_CLI = resolve_sd_cli()
 
-MODEL_DEFAULTS = {"sd-turbo": {"steps": 4, "guidance": 1.0, "strength": 1.0},
-                  "sdxl-turbo": {"steps": 4, "guidance": 1.0, "strength": 1.0},
-                  "sd15-inpaint": {"steps": 25, "guidance": 7.0, "strength": 1.0}}
+MODEL_DEFAULTS = {"sd-turbo": {"steps": 4, "guidance": 1.0, "strength": 1.0, "long_side": 512},
+                  "sdxl-turbo": {"steps": 4, "guidance": 1.0, "strength": 1.0, "long_side": 1024},
+                  "sd15-inpaint": {"steps": 25, "guidance": 7.0, "strength": 1.0, "long_side": 768}}
 
 
 def resolve_model(name="sd-turbo"):
@@ -104,6 +104,25 @@ def dilate_mask(mask, px):
     return mask.filter(ImageFilter.MaxFilter(2 * int(px) + 1))
 
 
+def paste_back(original, filled, mask, dilate=0, feather=0):
+    """วางส่วนที่ AI เติม (filled) กลับลงบนรูปต้นฉบับตาม mask — คืนรูปเท่าต้นฉบับ สัดส่วนเดิม.
+
+    filled ถูกย่อ/ขยายให้เท่าต้นฉบับก่อนวาง (Lanczos); นอก mask คงพิกเซลเดิม 100%."""
+    from PIL import Image, ImageFilter
+    orig = original.convert("RGB")
+    if filled.size != orig.size:
+        filled = filled.resize(orig.size, Image.LANCZOS)
+    else:
+        filled = filled.convert("RGB")
+    m = mask.convert("L")
+    if m.size != orig.size:
+        m = m.resize(orig.size, Image.NEAREST)
+    m = dilate_mask(m, dilate)
+    if feather > 0:
+        m = m.filter(ImageFilter.GaussianBlur(feather))
+    return Image.composite(filled, orig, m)
+
+
 def inpaint(image, mask, prompt, steps=4, guidance=1.0, strength=1.0, seed=None,
             negative="", model="sd-turbo", long_side=512, feather=8, dilate=5):
     """ลบส่วนขาวใน mask แล้วให้ AI เติมใหม่ คืน (PIL Image, seed ที่ใช้จริง).
@@ -111,7 +130,8 @@ def inpaint(image, mask, prompt, steps=4, guidance=1.0, strength=1.0, seed=None,
     image/mask ต้องขนาดเท่ากัน (mask โหมดอะไรก็ได้ — แปลงเป็นขาว/ดำเอง);
     ทำงานที่ขนาดย่อ (ด้านยาว long_side) แล้วคืนรูปขนาดนั้น;
     feather = เบลอขอบ mask (พิกเซลที่ขนาดทำงาน) ให้รอยต่อเนียนขึ้น (0 = ไม่เบลอ);
-    dilate = ขยาย mask ออกไปก่อน (พิกเซลที่ขนาดทำงาน) ให้คลุมขอบวัตถุ (0 = ไม่ขยาย)."""
+    dilate = ขยาย mask ออกไปก่อน (พิกเซลที่ขนาดทำงาน) ให้คลุมขอบวัตถุ (0 = ไม่ขยาย);
+    คืนรูปเท่าต้นฉบับ (วางส่วนที่เติมกลับลงบนรูปเดิม นอก mask คงพิกเซลเดิม)."""
     from PIL import Image, ImageFilter
     if image.size != mask.size:
         raise ValueError(f"รูปกับ mask ต้องขนาดเท่ากัน (ได้ {image.size} กับ {mask.size})")
@@ -141,7 +161,11 @@ def inpaint(image, mask, prompt, steps=4, guidance=1.0, strength=1.0, seed=None,
         p = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
         if p.returncode != 0 or not os.path.isfile(out):
             raise RuntimeError(f"sd-cli ล้มเหลว:\n{(p.stderr or p.stdout)[-800:]}")
-        return Image.open(out).convert("RGB"), seed
+        raw = Image.open(out).convert("RGB")
+        scale = max(image.size) / max(w, h)
+        final = paste_back(image, raw, mask,
+                           dilate=round(dilate * scale), feather=round(feather * scale))
+        return final, seed
 
 
 def main():
